@@ -14,6 +14,12 @@ beforeEach(() => {
     fs.unlink(filePath, (err) => {
     });
 });
+afterAll(() => {
+    const filePath = 'tmp/csv-example';
+
+    fs.unlink(filePath, (err) => {
+    });
+})
 describe('routes.ts', () => {
     it('Should return error 400 when a file is not found', async () => {
         const response = await request(app)
