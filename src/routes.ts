@@ -2,53 +2,61 @@ import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import * as fs from 'fs';
 import { parse } from 'csv-parse';
+import { storage } from './services/csv-management.services';
+import TypedRequestQuery from "./types/query.types"
 
 const router = Router();
 
-let results: any[] = [];
-
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, './tmp/')
-    },
-    filename: function (req, file, cb) {
-        const uniqueSuffix = 'csv-example'
-        cb(null, uniqueSuffix)
-    }
-})
-
 const multerConfig = multer({ storage: storage })
 
-
-router.post(
-    '/api/files',
-    multerConfig.single('file'),
+router.post('/api/files', multerConfig.single('file'),
     async (request: Request, response: Response) => {
+        const file = request.file
+        if (!file) {
+            response.status(400).send({ message: 'Please, upload a file' });
+            return;
+        }
+
+        if (file.originalname.split('.').pop() != 'csv') {
+            response.status(400).send({ message: 'Please, upload a csv file' });
+            return;
+        }
+
         fs.createReadStream('tmp/csv-example')
             .pipe(parse())
-            .on('data', (line) => {
-                results.push(line);
-            }).on('end', () => {
-                response.json({ message: 'File is saved' });
+            .on('data', () => {
+            })
+            .on('end', () => {
+                response.status(200).send({ message: 'File is saved' });
+                return
             });
 
     })
 
-router.get('/api/users', (request: Request, response: Response) => {
-    let filter = request.query.filter;    
-    for (let items of results) {
-        for (let item of items) {
-            if (item.toUpperCase().match(filter?.toString().toUpperCase())) {
-                return response.json({
-                    Name: items[0],
-                    City: items[1],
-                    Country: items[2],
-                    Favorite_Sport: items[3]
-                })
-            }
-        }
+
+router.get('/api/users', (request: TypedRequestQuery<{ q: string }>, response: Response) => {
+    const q = request.query.q;
+    let result: { Name: string, Country: string, City: string, Favorite_Sport: string }[] = [];
+
+    if (!fs.existsSync('tmp/csv-example')) {
+        response.status(402).send({ message: 'File is not found' });
+        return
     }
 
+    fs.createReadStream("tmp/csv-example")
+        .pipe(parse({ columns: true }))
+        .on("data", (data) => {
+            for (let item in data) {
+                if (data[item].toUpperCase().match(q?.toString().toUpperCase())) {
+                    if (!result.includes(data)) {
+                        result.push(data)
+                    }
+                }
+            }
+        })
+        .on("end", () => {
+            response.send(result);
+        });
 
 });
 
